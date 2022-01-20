@@ -60,7 +60,7 @@ def _filter_client(request, current_time):
     user = request.user
     user_id = user.id
 
-    addr = request.META['REMOTE_ADDR']
+    addr = _get_client_ip(request)
 
     # no logging here, because the event will be logged either by the caller, or by django.request
 
@@ -74,6 +74,15 @@ def _filter_client(request, current_time):
         until = blacklist.get(network)
         if until is not None and until > current_time:
             raise Blacklisted('Blacklisted address: %s' % addr)
+
+
+def _get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
 
 
 def _needs_reload(current_time):
