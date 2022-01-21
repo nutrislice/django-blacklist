@@ -1,4 +1,5 @@
 import ipaddress
+import re
 import threading
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Union
@@ -12,7 +13,7 @@ from django.shortcuts import render
 from django.conf import settings
 
 from .models import Rule
-
+from .utils import sanitize_ip
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,11 @@ def _filter_client(request, current_time):
         raise Blacklisted('Blacklisted user: %s' % user.username)
 
     for prefixlen, blacklist in _addr_blacklist.items():
-        network = Rule(address=addr, prefixlen=prefixlen).get_network()
+        try:
+            network = Rule(address=addr, prefixlen=prefixlen).get_network()
+        except ValueError:
+            logger.info(f'Unable to convert address: {addr}')
+            return
 
         until = blacklist.get(network)
         if until is not None and until > current_time:
@@ -79,10 +84,10 @@ def _filter_client(request, current_time):
 def _get_client_ip(request):
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
+        ip = x_forwarded_for
     else:
         ip = request.META.get('REMOTE_ADDR')
-    return ip
+    return sanitize_ip(ip)
 
 
 def _needs_reload(current_time):
